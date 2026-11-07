@@ -339,6 +339,42 @@ def add_target(df: pd.DataFrame, definition: str = config.TARGET_DEFINITION) -> 
     return result, target_info
 
 
+def load_split_assignments(
+    target: str = config.TARGET_DEFINITION,
+    path: str | Path | None = None,
+    *,
+    feature_version: str = config.DEFAULT_FEATURE_VERSION,
+) -> pd.DataFrame:
+    """Load the Phase 1 split assignment without any model features.
+
+    Deep-learning code needs only ``image_id``, ``lesion_id``, ``target`` and
+    ``split``. Keeping it separate avoids making the CNN depend on the tabular
+    feature table.
+    """
+    path = Path(path or config.split_assignment_path(target, feature_version))
+    if not path.exists():
+        raise FileNotFoundError(
+            f"split assignments not found: {path}; run scripts/build_phase1_dataset.py first"
+        )
+
+    assignment = pd.read_csv(path)
+    required = {"image_id", "lesion_id", "target", "target_label", "fold", "split"}
+    missing = required - set(assignment.columns)
+    if missing:
+        raise DataValidationError(
+            f"split assignment is missing columns: {sorted(missing)}"
+        )
+    if assignment["image_id"].duplicated().any():
+        raise DataValidationError("split assignment contains duplicated image_id values")
+    if assignment["target"].isna().any():
+        raise DataValidationError("target contains missing values")
+    if set(assignment["split"].unique()) != {"train", "validation", "test"}:
+        raise DataValidationError(
+            "split column must contain train, validation, and test"
+        )
+    return assignment
+
+
 def load_modeling_frame(
     target: str = config.TARGET_DEFINITION,
     interim_path: str | Path | None = None,
