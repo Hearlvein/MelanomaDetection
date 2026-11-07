@@ -1,0 +1,36 @@
+{
+  "phase": 2,
+  "created_at": "2026-11-06T12:50:28.203473+00:00",
+  "target": "multiclass",
+  "model": "LogisticRegression(class_weight='balanced')",
+  "pipeline": {
+    "scale_numeric": true,
+    "k": 15,
+    "preprocessed_feature_count": 35,
+    "selected_feature_count": 15
+  },
+  "data": {
+    "train_rows": 6008,
+    "train_lesions": 4481,
+    "validation_rows": 2003,
+    "validation_lesions": 1494
+  },
+  "grouped_cv": {
+    "n_splits": 5,
+    "seed": 42,
+    "scoring": "balanced_accuracy",
+    "scores": [
+      0.5627726211229748,
+      0.6066977305886446,
+      0.551023586594084,
+      0.5606246676387024,
+      0.5158976266037392
+    ],
+    "mean": 0.559403246509629,
+    "std": 0.029026093236451295
+  },
+  "validation_smoke": {
+    "balanced_accuracy": 0.5109059554064485,
+    "note": "Smoke check only; validation is not used for model selection in Phase 2."
+  }
+}

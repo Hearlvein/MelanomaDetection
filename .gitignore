@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large / regenerable data
+data/external/
+data/interim/
+data/processed/
+
+# Large model binaries (keep the JSON sidecars and pointers)
+models/*.joblib
+models/*.keras
+models/*.h5
+models/*.pt
+models/*.pth
+
+# Legacy duplicate at repository root
+/HAM10000_features_couleurs.xlsx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

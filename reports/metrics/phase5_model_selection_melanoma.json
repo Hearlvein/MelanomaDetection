@@ -1,0 +1,767 @@
+{
+  "phase": 5,
+  "target": {
+    "definition": "melanoma",
+    "description": "Melanoma vs all non-melanoma diagnoses (current notebook task).",
+    "positive_classes": [
+      "mel"
+    ],
+    "negative_classes": [
+      "nv",
+      "bkl",
+      "bcc",
+      "akiec",
+      "vasc",
+      "df"
+    ],
+    "labels": {
+      "1": "melanoma",
+      "0": "non_melanoma"
+    }
+  },
+  "protocol": {
+    "created_at": "2026-11-06T21:49:56.942166+00:00",
+    "seed": 42,
+    "n_splits": 5,
+    "n_iter": 30,
+    "bootstrap_reps": 2000,
+    "sensitivity_target": 0.9,
+    "threshold_source": "grouped CV OOF predictions on split == train",
+    "test_used": false,
+    "selection_rule": "highest validation average precision; F2 tie-break within 0.005"
+  },
+  "data": {
+    "train": {
+      "rows": 6009,
+      "lesions": 4482,
+      "positive": 668,
+      "negative": 5341,
+      "prevalence": 0.11116658345814612
+    },
+    "validation": {
+      "rows": 2003,
+      "lesions": 1494,
+      "positive": 222,
+      "negative": 1781,
+      "prevalence": 0.1108337493759361
+    },
+    "test_used": false
+  },
+  "phase4": {
+    "path": "reports/metrics/phase4_imbalance_melanoma.json",
+    "strategies": {
+      "logistic_regression": "none",
+      "random_forest": "random_under",
+      "hist_gradient_boosting": "balanced",
+      "extra_trees": "balanced"
+    }
+  },
+  "candidates": [
+    {
+      "model": "logistic_regression",
+      "model_label": "Logistic Regression",
+      "strategy": "none",
+      "scale_numeric": true,
+      "best_params": {
+        "classifier__C": 7.510418138777549,
+        "classifier__penalty": "l2",
+        "selector__k": 15
+      },
+      "cv": {
+        "scoring": "average_precision",
+        "best_mean_score": 0.3406001839496403,
+        "mean_test_score": 0.3406001839496403,
+        "std_test_score": 0.03390742675714177,
+        "rank_test_score": 1,
+        "n_candidates": 30
+      },
+      "threshold_selection": {
+        "f2_threshold": 0.0904540564757243,
+        "sensitivity_target": 0.9,
+        "sensitivity_threshold": 0.06217629582231701
+      },
+      "oof": {
+        "average_precision": 0.3320415842297332,
+        "roc_auc": 0.801425140731456,
+        "f2": 0.5413887799136916
+      },
+      "validation": {
+        "metrics": {
+          "threshold": 0.0904540564757243,
+          "n": 2003,
+          "n_positive": 222,
+          "n_negative": 1781,
+          "prevalence": 0.1108337493759361,
+          "predicted_positive_rate": 0.4063904143784324,
+          "confusion_matrix": {
+            "tn": 1150,
+            "fp": 631,
+            "fn": 39,
+            "tp": 183
+          },
+          "sensitivity": 0.8243243243243243,
+          "specificity": 0.6457046603032004,
+          "ppv": 0.22481572481572482,
+          "npv": 0.9671993271656855,
+          "f1": 0.3532818532818533,
+          "f2": 0.5376028202115158,
+          "accuracy": 0.6655017473789316,
+          "balanced_accuracy": 0.7350144923137624,
+          "average_precision": 0.3054510525373898,
+          "roc_auc": 0.7935566110748593,
+          "brier_score": 0.08759512513325189
+        },
+        "confidence_intervals": {
+          "sensitivity": {
+            "lower": 0.7622853239656517,
+            "upper": 0.8835092162656536
+          },
+          "specificity": {
+            "lower": 0.6177577787871905,
+            "upper": 0.6720067563793626
+          },
+          "ppv": {
+            "lower": 0.18509316770186335,
+            "upper": 0.263982451670198
+          },
+          "npv": {
+            "lower": 0.9531746869283805,
+            "upper": 0.979044864585571
+          },
+          "f1": {
+            "lower": 0.30020664346876,
+            "upper": 0.4022898674984911
+          },
+          "f2": {
+            "lower": 0.4803307271092707,
+            "upper": 0.5904651351877179
+          },
+          "accuracy": {
+            "lower": 0.6392458599960662,
+            "upper": 0.6896922442759905
+          },
+          "balanced_accuracy": {
+            "lower": 0.702057247847863,
+            "upper": 0.7666471095785018
+          },
+          "average_precision": {
+            "lower": 0.2430823940604282,
+            "upper": 0.38681065660385167
+          },
+          "roc_auc": {
+            "lower": 0.7565153537407989,
+            "upper": 0.8283978777750459
+          },
+          "brier_score": {
+            "lower": 0.07540739188186048,
+            "upper": 0.10081561619334777
+          },
+          "predicted_positive_rate": {
+            "lower": 0.3805395422750605,
+            "upper": 0.43236297620785286
+          }
+        },
+        "confusion_matrix": {
+          "tn": 1150,
+          "fp": 631,
+          "fn": 39,
+          "tp": 183
+        }
+      },
+      "validation_at_sensitivity_threshold": {
+        "threshold": 0.06217629582231701,
+        "n": 2003,
+        "n_positive": 222,
+        "n_negative": 1781,
+        "prevalence": 0.1108337493759361,
+        "predicted_positive_rate": 0.5376934598102846,
+        "confusion_matrix": {
+          "tn": 901,
+          "fp": 880,
+          "fn": 25,
+          "tp": 197
+        },
+        "sensitivity": 0.8873873873873874,
+        "specificity": 0.5058955642897248,
+        "ppv": 0.1829155060352832,
+        "npv": 0.9730021598272138,
+        "f1": 0.30331023864511164,
+        "f2": 0.5012722646310434,
+        "accuracy": 0.5481777333999002,
+        "balanced_accuracy": 0.6966414758385562,
+        "average_precision": 0.3054510525373898,
+        "roc_auc": 0.7935566110748593,
+        "brier_score": 0.08759512513325189
+      }
+    },
+    {
+      "model": "random_forest",
+      "model_label": "Random Forest",
+      "strategy": "random_under",
+      "scale_numeric": false,
+      "best_params": {
+        "selector__k": 30,
+        "classifier__n_estimators": 200,
+        "classifier__min_samples_leaf": 2,
+        "classifier__max_features": "log2",
+        "classifier__max_depth": 30
+      },
+      "cv": {
+        "scoring": "average_precision",
+        "best_mean_score": 0.3164435013060759,
+        "mean_test_score": 0.3164435013060759,
+        "std_test_score": 0.0444875550754972,
+        "rank_test_score": 1,
+        "n_candidates": 30
+      },
+      "threshold_selection": {
+        "f2_threshold": 0.42208236950694256,
+        "sensitivity_target": 0.9,
+        "sensitivity_threshold": 0.4053816526610644
+      },
+      "oof": {
+        "average_precision": 0.3092708787726332,
+        "roc_auc": 0.8017923150142328,
+        "f2": 0.5387266461091964
+      },
+      "validation": {
+        "metrics": {
+          "threshold": 0.42208236950694256,
+          "n": 2003,
+          "n_positive": 222,
+          "n_negative": 1781,
+          "prevalence": 0.1108337493759361,
+          "predicted_positive_rate": 0.46580129805292064,
+          "confusion_matrix": {
+            "tn": 1031,
+            "fp": 750,
+            "fn": 39,
+            "tp": 183
+          },
+          "sensitivity": 0.8243243243243243,
+          "specificity": 0.5788882650196518,
+          "ppv": 0.19614147909967847,
+          "npv": 0.9635514018691589,
+          "f1": 0.3168831168831169,
+          "f2": 0.5024711696869852,
+          "accuracy": 0.6060908637044433,
+          "balanced_accuracy": 0.7016062946719881,
+          "average_precision": 0.3547657322332996,
+          "roc_auc": 0.8069082558133653,
+          "brier_score": 0.18590548656496828
+        },
+        "confidence_intervals": {
+          "sensitivity": {
+            "lower": 0.763615221987315,
+            "upper": 0.8794728708791208
+          },
+          "specificity": {
+            "lower": 0.5531789081827905,
+            "upper": 0.6048924837950164
+          },
+          "ppv": {
+            "lower": 0.16231171580206766,
+            "upper": 0.23093263804717148
+          },
+          "npv": {
+            "lower": 0.948620598960423,
+            "upper": 0.9761248852157943
+          },
+          "f1": {
+            "lower": 0.2696029625350056,
+            "upper": 0.36276336405970994
+          },
+          "f2": {
+            "lower": 0.44813701898793,
+            "upper": 0.5544003507748211
+          },
+          "accuracy": {
+            "lower": 0.5819972061657033,
+            "upper": 0.6308397002244887
+          },
+          "balanced_accuracy": {
+            "lower": 0.6684142317786196,
+            "upper": 0.7323375633291557
+          },
+          "average_precision": {
+            "lower": 0.2865038138498897,
+            "upper": 0.4294903613446927
+          },
+          "roc_auc": {
+            "lower": 0.771036998874525,
+            "upper": 0.8398651077182603
+          },
+          "brier_score": {
+            "lower": 0.17707293995825793,
+            "upper": 0.19484608529913713
+          },
+          "predicted_positive_rate": {
+            "lower": 0.44057146564554234,
+            "upper": 0.4908370480435859
+          }
+        },
+        "confusion_matrix": {
+          "tn": 1031,
+          "fp": 750,
+          "fn": 39,
+          "tp": 183
+        }
+      },
+      "validation_at_sensitivity_threshold": {
+        "threshold": 0.4053816526610644,
+        "n": 2003,
+        "n_positive": 222,
+        "n_negative": 1781,
+        "prevalence": 0.1108337493759361,
+        "predicted_positive_rate": 0.49425861208187716,
+        "confusion_matrix": {
+          "tn": 976,
+          "fp": 805,
+          "fn": 37,
+          "tp": 185
+        },
+        "sensitivity": 0.8333333333333334,
+        "specificity": 0.5480067377877597,
+        "ppv": 0.18686868686868688,
+        "npv": 0.9634748272458046,
+        "f1": 0.30528052805280526,
+        "f2": 0.4925452609158679,
+        "accuracy": 0.5796305541687469,
+        "balanced_accuracy": 0.6906700355605465,
+        "average_precision": 0.3547657322332996,
+        "roc_auc": 0.8069082558133653,
+        "brier_score": 0.18590548656496828
+      }
+    },
+    {
+      "model": "hist_gradient_boosting",
+      "model_label": "HistGradientBoosting",
+      "strategy": "balanced",
+      "scale_numeric": false,
+      "best_params": {
+        "selector__k": 30,
+        "classifier__min_samples_leaf": 40,
+        "classifier__max_leaf_nodes": 63,
+        "classifier__max_iter": 200,
+        "classifier__learning_rate": 0.03,
+        "classifier__l2_regularization": 0.1
+      },
+      "cv": {
+        "scoring": "average_precision",
+        "best_mean_score": 0.3675688325355706,
+        "mean_test_score": 0.3675688325355706,
+        "std_test_score": 0.023754459752752616,
+        "rank_test_score": 1,
+        "n_candidates": 30
+      },
+      "threshold_selection": {
+        "f2_threshold": 0.15303176711261746,
+        "sensitivity_target": 0.9,
+        "sensitivity_threshold": 0.05326119446302022
+      },
+      "oof": {
+        "average_precision": 0.35920477723449673,
+        "roc_auc": 0.814230834343296,
+        "f2": 0.5489210140372931
+      },
+      "validation": {
+        "metrics": {
+          "threshold": 0.15303176711261746,
+          "n": 2003,
+          "n_positive": 222,
+          "n_negative": 1781,
+          "prevalence": 0.1108337493759361,
+          "predicted_positive_rate": 0.3569645531702446,
+          "confusion_matrix": {
+            "tn": 1237,
+            "fp": 544,
+            "fn": 51,
+            "tp": 171
+          },
+          "sensitivity": 0.7702702702702703,
+          "specificity": 0.6945536215609208,
+          "ppv": 0.23916083916083916,
+          "npv": 0.9604037267080745,
+          "f1": 0.36499466382070433,
+          "f2": 0.5333749220212103,
+          "accuracy": 0.7029455816275587,
+          "balanced_accuracy": 0.7324119459155956,
+          "average_precision": 0.3525404602485892,
+          "roc_auc": 0.819162227921352,
+          "brier_score": 0.10209753548542778
+        },
+        "confidence_intervals": {
+          "sensitivity": {
+            "lower": 0.7036892361111111,
+            "upper": 0.83028106048826
+          },
+          "specificity": {
+            "lower": 0.668498543973489,
+            "upper": 0.7190370375892667
+          },
+          "ppv": {
+            "lower": 0.19700824198923744,
+            "upper": 0.28153160120692283
+          },
+          "npv": {
+            "lower": 0.9467727923776311,
+            "upper": 0.97267792481401
+          },
+          "f1": {
+            "lower": 0.31256493789306805,
+            "upper": 0.4159125369467582
+          },
+          "f2": {
+            "lower": 0.47557931935106873,
+            "upper": 0.5868122989822975
+          },
+          "accuracy": {
+            "lower": 0.6788316734410135,
+            "upper": 0.7253428727116085
+          },
+          "balanced_accuracy": {
+            "lower": 0.696382468838034,
+            "upper": 0.7657451643978548
+          },
+          "average_precision": {
+            "lower": 0.28540801032279184,
+            "upper": 0.43149461576352977
+          },
+          "roc_auc": {
+            "lower": 0.7872263978888945,
+            "upper": 0.8481905236046826
+          },
+          "brier_score": {
+            "lower": 0.09159141882096616,
+            "upper": 0.1130447669674377
+          },
+          "predicted_positive_rate": {
+            "lower": 0.33231004765956396,
+            "upper": 0.3824295416037737
+          }
+        },
+        "confusion_matrix": {
+          "tn": 1237,
+          "fp": 544,
+          "fn": 51,
+          "tp": 171
+        }
+      },
+      "validation_at_sensitivity_threshold": {
+        "threshold": 0.05326119446302022,
+        "n": 2003,
+        "n_positive": 222,
+        "n_negative": 1781,
+        "prevalence": 0.1108337493759361,
+        "predicted_positive_rate": 0.5466799800299551,
+        "confusion_matrix": {
+          "tn": 890,
+          "fp": 891,
+          "fn": 18,
+          "tp": 204
+        },
+        "sensitivity": 0.918918918918919,
+        "specificity": 0.49971925884334645,
+        "ppv": 0.1863013698630137,
+        "npv": 0.9801762114537445,
+        "f1": 0.3097949886104784,
+        "f2": 0.5143721633888049,
+        "accuracy": 0.54618072890664,
+        "balanced_accuracy": 0.7093190888811327,
+        "average_precision": 0.3525404602485892,
+        "roc_auc": 0.819162227921352,
+        "brier_score": 0.10209753548542778
+      }
+    },
+    {
+      "model": "extra_trees",
+      "model_label": "ExtraTrees",
+      "strategy": "balanced",
+      "scale_numeric": false,
+      "best_params": {
+        "selector__k": 30,
+        "classifier__n_estimators": 300,
+        "classifier__min_samples_leaf": 4,
+        "classifier__max_features": null,
+        "classifier__max_depth": 30
+      },
+      "cv": {
+        "scoring": "average_precision",
+        "best_mean_score": 0.3480284597837435,
+        "mean_test_score": 0.3480284597837435,
+        "std_test_score": 0.03393766573463086,
+        "rank_test_score": 1,
+        "n_candidates": 30
+      },
+      "threshold_selection": {
+        "f2_threshold": 0.21988258270937328,
+        "sensitivity_target": 0.9,
+        "sensitivity_threshold": 0.13376255481985155
+      },
+      "oof": {
+        "average_precision": 0.33683055151014907,
+        "roc_auc": 0.8034605755723154,
+        "f2": 0.5359675785207699
+      },
+      "validation": {
+        "metrics": {
+          "threshold": 0.21988258270937328,
+          "n": 2003,
+          "n_positive": 222,
+          "n_negative": 1781,
+          "prevalence": 0.1108337493759361,
+          "predicted_positive_rate": 0.3709435846230654,
+          "confusion_matrix": {
+            "tn": 1212,
+            "fp": 569,
+            "fn": 48,
+            "tp": 174
+          },
+          "sensitivity": 0.7837837837837838,
+          "specificity": 0.6805165637282425,
+          "ppv": 0.23418573351278602,
+          "npv": 0.9619047619047619,
+          "f1": 0.3606217616580311,
+          "f2": 0.5334150827713059,
+          "accuracy": 0.6919620569146281,
+          "balanced_accuracy": 0.7321501737560132,
+          "average_precision": 0.3591550441651797,
+          "roc_auc": 0.8200145681897507,
+          "brier_score": 0.09461676157481322
+        },
+        "confidence_intervals": {
+          "sensitivity": {
+            "lower": 0.7137237626328065,
+            "upper": 0.8500050607287449
+          },
+          "specificity": {
+            "lower": 0.65394818623967,
+            "upper": 0.705291654467849
+          },
+          "ppv": {
+            "lower": 0.1935859230355022,
+            "upper": 0.2760362890738488
+          },
+          "npv": {
+            "lower": 0.9470288320010659,
+            "upper": 0.9753494316734445
+          },
+          "f1": {
+            "lower": 0.30802591436890275,
+            "upper": 0.4112425688654375
+          },
+          "f2": {
+            "lower": 0.47408125396890133,
+            "upper": 0.5864866465992058
+          },
+          "accuracy": {
+            "lower": 0.6669919018878464,
+            "upper": 0.7155306638918536
+          },
+          "balanced_accuracy": {
+            "lower": 0.695453442097333,
+            "upper": 0.7680722334660328
+          },
+          "average_precision": {
+            "lower": 0.28902839488444215,
+            "upper": 0.43850895900802095
+          },
+          "roc_auc": {
+            "lower": 0.7864449755639471,
+            "upper": 0.8514304477081093
+          },
+          "brier_score": {
+            "lower": 0.08574891973246211,
+            "upper": 0.10407324780310229
+          },
+          "predicted_positive_rate": {
+            "lower": 0.34541789940249795,
+            "upper": 0.39637872278717345
+          }
+        },
+        "confusion_matrix": {
+          "tn": 1212,
+          "fp": 569,
+          "fn": 48,
+          "tp": 174
+        }
+      },
+      "validation_at_sensitivity_threshold": {
+        "threshold": 0.13376255481985155,
+        "n": 2003,
+        "n_positive": 222,
+        "n_negative": 1781,
+        "prevalence": 0.1108337493759361,
+        "predicted_positive_rate": 0.5416874687968047,
+        "confusion_matrix": {
+          "tn": 900,
+          "fp": 881,
+          "fn": 18,
+          "tp": 204
+        },
+        "sensitivity": 0.918918918918919,
+        "specificity": 0.5053340819764177,
+        "ppv": 0.1880184331797235,
+        "npv": 0.9803921568627451,
+        "f1": 0.31216526396327465,
+        "f2": 0.516979219462747,
+        "accuracy": 0.5511732401397903,
+        "balanced_accuracy": 0.7121265004476683,
+        "average_precision": 0.3591550441651797,
+        "roc_auc": 0.8200145681897507,
+        "brier_score": 0.09461676157481322
+      }
+    }
+  ],
+  "selected": {
+    "model": "extra_trees",
+    "model_label": "ExtraTrees",
+    "strategy": "balanced",
+    "scale_numeric": false,
+    "best_params": {
+      "selector__k": 30,
+      "classifier__n_estimators": 300,
+      "classifier__min_samples_leaf": 4,
+      "classifier__max_features": null,
+      "classifier__max_depth": 30
+    },
+    "cv": {
+      "scoring": "average_precision",
+      "best_mean_score": 0.3480284597837435,
+      "mean_test_score": 0.3480284597837435,
+      "std_test_score": 0.03393766573463086,
+      "rank_test_score": 1,
+      "n_candidates": 30
+    },
+    "threshold_selection": {
+      "f2_threshold": 0.21988258270937328,
+      "sensitivity_target": 0.9,
+      "sensitivity_threshold": 0.13376255481985155
+    },
+    "oof": {
+      "average_precision": 0.33683055151014907,
+      "roc_auc": 0.8034605755723154,
+      "f2": 0.5359675785207699
+    },
+    "validation": {
+      "metrics": {
+        "threshold": 0.21988258270937328,
+        "n": 2003,
+        "n_positive": 222,
+        "n_negative": 1781,
+        "prevalence": 0.1108337493759361,
+        "predicted_positive_rate": 0.3709435846230654,
+        "confusion_matrix": {
+          "tn": 1212,
+          "fp": 569,
+          "fn": 48,
+          "tp": 174
+        },
+        "sensitivity": 0.7837837837837838,
+        "specificity": 0.6805165637282425,
+        "ppv": 0.23418573351278602,
+        "npv": 0.9619047619047619,
+        "f1": 0.3606217616580311,
+        "f2": 0.5334150827713059,
+        "accuracy": 0.6919620569146281,
+        "balanced_accuracy": 0.7321501737560132,
+        "average_precision": 0.3591550441651797,
+        "roc_auc": 0.8200145681897507,
+        "brier_score": 0.09461676157481322
+      },
+      "confidence_intervals": {
+        "sensitivity": {
+          "lower": 0.7137237626328065,
+          "upper": 0.8500050607287449
+        },
+        "specificity": {
+          "lower": 0.65394818623967,
+          "upper": 0.705291654467849
+        },
+        "ppv": {
+          "lower": 0.1935859230355022,
+          "upper": 0.2760362890738488
+        },
+        "npv": {
+          "lower": 0.9470288320010659,
+          "upper": 0.9753494316734445
+        },
+        "f1": {
+          "lower": 0.30802591436890275,
+          "upper": 0.4112425688654375
+        },
+        "f2": {
+          "lower": 0.47408125396890133,
+          "upper": 0.5864866465992058
+        },
+        "accuracy": {
+          "lower": 0.6669919018878464,
+          "upper": 0.7155306638918536
+        },
+        "balanced_accuracy": {
+          "lower": 0.695453442097333,
+          "upper": 0.7680722334660328
+        },
+        "average_precision": {
+          "lower": 0.28902839488444215,
+          "upper": 0.43850895900802095
+        },
+        "roc_auc": {
+          "lower": 0.7864449755639471,
+          "upper": 0.8514304477081093
+        },
+        "brier_score": {
+          "lower": 0.08574891973246211,
+          "upper": 0.10407324780310229
+        },
+        "predicted_positive_rate": {
+          "lower": 0.34541789940249795,
+          "upper": 0.39637872278717345
+        }
+      },
+      "confusion_matrix": {
+        "tn": 1212,
+        "fp": 569,
+        "fn": 48,
+        "tp": 174
+      }
+    },
+    "validation_at_sensitivity_threshold": {
+      "threshold": 0.13376255481985155,
+      "n": 2003,
+      "n_positive": 222,
+      "n_negative": 1781,
+      "prevalence": 0.1108337493759361,
+      "predicted_positive_rate": 0.5416874687968047,
+      "confusion_matrix": {
+        "tn": 900,
+        "fp": 881,
+        "fn": 18,
+        "tp": 204
+      },
+      "sensitivity": 0.918918918918919,
+      "specificity": 0.5053340819764177,
+      "ppv": 0.1880184331797235,
+      "npv": 0.9803921568627451,
+      "f1": 0.31216526396327465,
+      "f2": 0.516979219462747,
+      "accuracy": 0.5511732401397903,
+      "balanced_accuracy": 0.7121265004476683,
+      "average_precision": 0.3591550441651797,
+      "roc_auc": 0.8200145681897507,
+      "brier_score": 0.09461676157481322
+    }
+  },
+  "artifact": {
+    "path": "models/phase5_melanoma_extra_trees.joblib",
+    "sidecar": "models/phase5_melanoma_extra_trees.json",
+    "pointer": "models/phase5_melanoma_frozen.json",
+    "sha256": "f3e9d69063ace6cf9604b40445859bfe8cc521e6321740f6ad7eedd3ace182c8"
+  },
+  "software": {
+    "python": "3.13.15",
+    "pandas": "3.1.1",
+    "numpy": "2.5.4",
+    "scikit-learn": "1.9.1"
+  }
+}

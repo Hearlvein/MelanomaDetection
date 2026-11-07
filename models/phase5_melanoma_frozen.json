@@ -1,0 +1,38 @@
+{
+  "target": "melanoma",
+  "model": "extra_trees",
+  "artifact": "models/phase5_melanoma_extra_trees.joblib",
+  "sidecar": "models/phase5_melanoma_extra_trees.json",
+  "threshold": {
+    "f2_threshold": 0.21988258270937328,
+    "sensitivity_target": 0.9,
+    "sensitivity_threshold": 0.13376255481985155
+  },
+  "validation": {
+    "threshold": 0.21988258270937328,
+    "n": 2003,
+    "n_positive": 222,
+    "n_negative": 1781,
+    "prevalence": 0.1108337493759361,
+    "predicted_positive_rate": 0.3709435846230654,
+    "confusion_matrix": {
+      "tn": 1212,
+      "fp": 569,
+      "fn": 48,
+      "tp": 174
+    },
+    "sensitivity": 0.7837837837837838,
+    "specificity": 0.6805165637282425,
+    "ppv": 0.23418573351278602,
+    "npv": 0.9619047619047619,
+    "f1": 0.3606217616580311,
+    "f2": 0.5334150827713059,
+    "accuracy": 0.6919620569146281,
+    "balanced_accuracy": 0.7321501737560132,
+    "average_precision": 0.3591550441651797,
+    "roc_auc": 0.8200145681897507,
+    "brier_score": 0.09461676157481322
+  },
+  "split_fingerprint": "b39eae73a410580368397df3c203b644d7887084cea27627084a318a5cffa862",
+  "created_at": "2026-11-06T21:49:56.942166+00:00"
+}
