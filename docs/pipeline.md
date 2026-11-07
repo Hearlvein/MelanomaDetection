@@ -21,12 +21,18 @@ All three stages are fitted inside the training fold. The following are intentio
 
 ## Feature columns
 
-Defined in `src/melanoma_detection/config.py`:
+Defined in `src/melanoma_detection/schema.py` and re-exported by
+`src/melanoma_detection/config.py`:
 
 - `NUMERIC_FEATURES`: age, colour channels/proportions, asymmetry, perimeter, area.
+  V2 adds `circularity` and `eccentricity`.
 - `CATEGORICAL_FEATURES`: sex, localization.
 - `ALL_FEATURES`: the only columns passed to the model.
 - `LABEL_COLUMNS`: image/lesion identifiers, diagnoses, target, fold, split. Never features.
+
+V1 is frozen at 21 columns for the existing Phase 5 artifact. New features belong
+to V2. `load_modeling_frame(..., feature_version="v2")` reads the V2 extract and
+its `_v2` split, so the two lines never mix columns silently.
 
 `build_preprocessor()` and `build_pipeline()` also accept explicit
 `numeric_features` and `categorical_features` sequences. This is used by the

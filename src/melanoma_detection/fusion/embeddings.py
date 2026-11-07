@@ -50,8 +50,10 @@ def save_embeddings(
 
     image_ids = np.asarray(image_ids, dtype=str)
     embeddings = np.asarray(embeddings, dtype=np.float32)
-    if embeddings.ndim != 2:
-        raise ValueError(f"embeddings must be 2D, got shape {embeddings.shape}")
+    if embeddings.ndim != 2 or embeddings.shape[1] < 1:
+        raise ValueError(
+            f"embeddings must be a non-empty 2D matrix, got shape {embeddings.shape}"
+        )
     if len(image_ids) != len(embeddings):
         raise ValueError(
             f"got {len(image_ids)} image_ids but {len(embeddings)} embedding rows"
@@ -114,6 +116,14 @@ def merge_embeddings(
 ) -> pd.DataFrame:
     """Attach embedding columns to a frame, preserving frame order."""
     embeddings = np.asarray(embeddings, dtype=np.float32)
+    if embeddings.ndim != 2 or embeddings.shape[1] < 1:
+        raise ValueError(
+            f"embeddings must be a non-empty 2D matrix, got shape {embeddings.shape}"
+        )
+    if len(image_ids) != len(embeddings):
+        raise ValueError(
+            f"got {len(image_ids)} image_ids but {len(embeddings)} embedding rows"
+        )
     table = pd.DataFrame(
         embeddings, columns=list(embedding_feature_names(embeddings.shape[1]))
     )

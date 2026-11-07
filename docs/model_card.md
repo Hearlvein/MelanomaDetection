@@ -1,8 +1,10 @@
 # Model card — HAM10000 melanoma detection (research use only)
 
-This model card describes the Phase 5 frozen model framework. The concrete
-numbers for a run are recorded in the generated artifacts and reports, not in
-this static document.
+This model card describes the Phase 5 frozen tabular model framework. The deep
+and late-fusion lines follow the same split and one-shot test rules but produce
+separate artifacts and reports; see `docs/deep_learning.md` and `docs/fusion.md`.
+The concrete numbers for a run are recorded in the generated artifacts and
+reports, not in this static document.
 
 ## Model details
 

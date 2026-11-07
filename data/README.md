@@ -71,6 +71,21 @@ python scripts/check_external_data.py
 The check verifies that every `image_id` in `data/raw/HAM10000_metadata.csv` has
 both an image and a mask. It does not download anything.
 
+## Embeddings and fusion
+
+The late-fusion line writes an embedding table and manifest to:
+
+```text
+data/interim/embeddings_<target>_<model>.npz   image_id + embedding matrix
+reports/metrics/embeddings_<target>_<model>.json
+```
+
+The `.npz` file stores `image_ids`, a float32 `embeddings` matrix, the model
+name, and the target. The manifest records dimensions, hashes, counts, the
+split fingerprint, and the extraction command. The fusion model itself lives
+under `models/fusion_<target>_extra_trees.{joblib,json}` with a frozen pointer.
+See `docs/fusion.md`.
+
 ## Manifest discipline
 
 Every generated table should be accompanied by a manifest containing:

@@ -7,20 +7,31 @@ Reproducible analysis of the HAM10000-derived feature dataset.
 Phases 1–5 are implemented: lesion-grouped data splits, a leak-free modelling
 pipeline, a validation-only evaluation protocol with baselines and
 lesion-clustered confidence intervals, an explicit imbalance comparison, and
-model tuning with a frozen artifact and a one-shot test evaluation. The original
-notebooks are kept for reference but their result tables are **not valid** for
-melanoma detection: they score the benign class by default and split images
-instead of lesions.
+model tuning with a frozen artifact and a one-shot test evaluation.
+
+Three model lines now share that protocol:
+
+- **tabular** — V1 feature workbook → leak-free scikit-learn pipelines;
+- **deep** — Keras/TensorFlow CNNs on raw images;
+- **fusion** — V2 tabular features + frozen image embeddings → ExtraTrees.
+
+Only `melanoma` receives official Phase 4/5, deep, fusion, and one-shot test
+runs. The original notebooks are kept for reference but their result tables are
+**not valid** for melanoma detection: they score the benign class by default and
+split images instead of lesions.
 
 ## Project layout
 
 ```text
 data/
-  raw/          raw workbook and official HAM10000 metadata
-  interim/      merged data with lesion_id and original diagnosis
+  raw/          V1 workbook and official HAM10000 metadata
+  reference/    archived V2 extract for parity checks
+  external/     NOT tracked: HAM10000 images and lesion masks
+  interim/      merged data, V2 extract, embedding tables
   processed/    split assignments and active-target pointer
 src/melanoma_detection/
-  config.py     paths, constants, target specifications
+  config.py     paths, constants, feature versions, target specifications
+  schema.py     canonical V1/V2 column contracts
   data.py       loading, merge, validation, target construction
   splits.py     lesion-grouped split and grouped CV
   features.py   leak-free preprocessor and feature selector
@@ -29,13 +40,22 @@ src/melanoma_detection/
   training.py   shared OOF/threshold/evaluation helpers
   imbalance.py  class-weight and resampling strategies
   train.py      tuning, threshold freezing, artifacts, one-shot guard
+  extraction/   V2 colour/shape feature extraction from images and masks
+  deep/         Keras datasets, models, training, evaluation, embeddings
+  fusion/       embedding storage, PCA pipeline, fusion training/evaluation
 scripts/
-  build_phase1_dataset.py
+  build_phase1_dataset.py       build V1 or V2 dataset and split
+  extract_features.py           V2 image feature extraction
   check_phase2_pipeline.py
   run_phase3_evaluation.py
   run_phase4_imbalance.py
   run_phase5_model_selection.py
   evaluate_final_test.py
+  train_deep.py                 train a Keras classifier
+  evaluate_deep.py              one-shot deep test evaluation
+  extract_embeddings.py         frozen image embeddings for fusion
+  train_fusion.py               V2 + embedding fusion model
+  evaluate_fusion.py            one-shot fusion test evaluation
 tests/
 docs/
 models/
@@ -45,11 +65,19 @@ reports/figures/
 
 ## Quick start
 
-Install dependencies in your preferred environment:
+Install the package and the optional lines you need:
 
 ```bash
-pip install -r requirements.txt
+# tabular + extraction + tests
+pip install -e ".[tabular,extraction,dev]"
+
+# add TensorFlow/Keras for the deep and fusion lines
+pip install -e ".[tabular,extraction,deep,dev]"
 ```
+
+The equivalent Make targets are `make install` and `make install-deep`. The
+legacy `requirements*.txt` files are kept for convenience; `pyproject.toml` is
+the canonical dependency definition.
 
 Build the default melanoma-vs-non-melanoma split:
 
@@ -71,6 +99,20 @@ python scripts/build_phase1_dataset.py --target melanoma
 - `multiclass` — original seven HAM10000 diagnoses.
 
 See `docs/target_definition.md`.
+
+## Feature versions
+
+Two tabular schemas are supported and must not be mixed:
+
+| Version | Columns | Use |
+|---|---:|---|
+| V1 | 21 | Frozen Phase 5 ExtraTrees artifact and the legacy pipeline |
+| V2 | 23 legacy / 24 with `lesion_id` | New extraction, deep/fusion tabular inputs |
+
+V1 is frozen: never add features to it. New features (notably `circularity` and
+`eccentricity`) belong to V2. Both versions produce the same lesion-grouped
+split fingerprint because the split depends only on `image_id`, `lesion_id`, and
+`target`. See `data/README.md` for paths and build commands.
 
 ## Phase 1 outputs
 
@@ -237,14 +279,82 @@ Reports:
 **The test split has been evaluated once. Do not rerun it without an explicit,
 documented `--force` decision.**
 
+## Image feature extraction (V2)
+
+The supported extraction replaces the legacy notebook cells and keeps
+`lesion_id` so the lesion-grouped split can be enforced:
+
+```bash
+python scripts/build_phase1_dataset.py --target melanoma --features v2
+python scripts/extract_features.py --overwrite
+```
+
+This requires HAM10000 images and Tschandl lesion masks under
+`data/external/HAM10000_Dataset/`; validate them with
+`python scripts/check_external_data.py`. When the generated V2 CSV is absent,
+the loader falls back to `data/reference/HAM10000_features_couleurs_v2.csv`,
+which is sufficient for tabular-only tests. See `data/README.md`.
+
+## Deep learning line
+
+`src/melanoma_detection/deep/` contains Keras datasets, models, training,
+evaluation, and penultimate embedding extraction. Two architectures are
+available: `custom_cnn` and a frozen ImageNet `vgg16` transfer model.
+
+```bash
+python scripts/train_deep.py --target melanoma --model custom_cnn
+python scripts/evaluate_deep.py --target melanoma --model custom_cnn
+python scripts/extract_embeddings.py --target melanoma --model vgg16 --weights imagenet
+```
+
+Training reads only train/validation rows. Test evaluation is guarded by
+`reports/metrics/deep_final_test_<target>_<model>.json` and refuses to overwrite
+without `--force`. Outputs are `models/deep_<target>_<model>.keras` plus a JSON
+sidecar and pointer, and reports under `reports/metrics/`.
+
+Only `melanoma` is officially supported. Real image runs require the external
+images; synthetic checks use `--weights none`. See `docs/deep_learning.md`.
+
+## Late fusion
+
+Fusion combines V2 tabular features with frozen image embeddings:
+
+```bash
+# 1. build V2 split and extract embeddings (once)
+python scripts/build_phase1_dataset.py --target melanoma --features v2
+python scripts/extract_embeddings.py --target melanoma --features v2 --weights imagenet
+
+# 2. train and evaluate once
+python scripts/train_fusion.py --target melanoma --features v2
+python scripts/evaluate_fusion.py --target melanoma --features v2
+```
+
+Defaults are ExtraTrees, VGG16 pooled embeddings, and PCA to 32 components.
+Imputation, standardisation, and PCA are fitted inside the scikit-learn pipeline
+on training folds only. The grouped-OOF F2 threshold is frozen in the artifact;
+the test report is guarded exactly like the tabular and deep lines.
+
+Outputs are `data/interim/embeddings_<target>_<model>.npz` with a manifest,
+`models/fusion_<target>_extra_trees.joblib` plus sidecar and pointer, and
+`reports/metrics/fusion_*.json` / `.md`. Only `melanoma` is officially
+supported. See `docs/fusion.md`.
+
 ## Tests
 
 ```bash
+# after installing the package and dev extras
+pytest -q
+
+# or with uv, including TensorFlow
 uv run --python 3.13 --with pytest --with pandas --with openpyxl \
-  --with scikit-learn==1.9.1 --with imbalanced-learn pytest
+  --with scikit-learn==1.9.1 --with imbalanced-learn --with scikit-image \
+  --with pillow --with tqdm --with tensorflow-cpu pytest -q
 ```
 
-The integration test is skipped automatically if the raw inputs are absent.
+Deep tests call `pytest.importorskip("tensorflow")`, so a tabular-only environment
+runs the rest of the suite and skips them. The real-data integration test is
+skipped automatically if the raw inputs are absent. CI runs a tabular job and a
+TensorFlow job; see `.github/workflows/tests.yml`.
 
 ## Phase 1 acceptance
 
@@ -261,10 +371,15 @@ The integration test is skipped automatically if the raw inputs are absent.
 - Phase 3: validation-only evaluation, baselines, threshold selection, CIs — complete.
 - Phase 4: class-weight and resampling comparison — complete.
 - Phase 5: tuning, validation comparison, frozen artifact, one-shot test — complete for `melanoma`.
+- Extraction: V1/V2 schemas and image feature extraction — complete; real V2 extraction needs external images and masks.
+- Deep line: Keras training, evaluation, and embedding extraction — implemented and smoke-tested; real runs need external images.
+- Fusion line: V2 tabular + embedding pipeline, training, and one-shot evaluation — implemented and smoke-tested; real runs need external images.
 
-The `melanoma` test split has been evaluated once. The `malignant` target has
-not received a final test evaluation and would need its own Phase 4/5 run first.
-Do not rerun the melanoma test to “try another threshold”.
+The `melanoma` tabular test split has been evaluated once. No real deep or fusion
+test report exists yet because HAM10000 images are not in the repository. The
+`malignant` target has not received a final test evaluation and would need its
+own Phase 4/5 run first. Do not rerun the melanoma test to “try another
+threshold”.
 
 Do not report model metrics from the legacy notebooks as final results.
 

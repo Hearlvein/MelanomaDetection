@@ -1,0 +1,32 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tabular:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[tabular,extraction,dev]"
+      - name: Test
+        run: python -m pytest -q
+
+  deep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[tabular,extraction,deep,dev]"
+      - name: Test deep and fusion CLIs
+        run: python -m pytest -q tests/test_deep.py tests/test_deep_cli.py tests/test_fusion_cli.py

@@ -151,6 +151,12 @@ def main() -> int:
             f"({config.FUSION_TARGETS}); results are experimental.",
             file=sys.stderr,
         )
+    if args.features != "v2":
+        print(
+            f"warning: fusion is defined on V2 features; --features is "
+            f"{args.features!r}.",
+            file=sys.stderr,
+        )
 
     output_path = args.output or fusion_artifact_path(args.target)
     report_path = args.report or (
