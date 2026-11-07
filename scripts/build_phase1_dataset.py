@@ -141,6 +141,8 @@ def render_summary(
                 ["Rows", dataset_info["rows"]],
                 ["Unique image IDs", dataset_info["unique_image_ids"]],
                 ["Unique lesions", dataset_info["unique_lesions"]],
+                ["Feature version", manifest.get("feature_version", config.DEFAULT_FEATURE_VERSION)],
+                ["Feature columns", ", ".join(manifest.get("feature_columns", []))],
                 ["Original diagnosis classes", ", ".join(config.EXPECTED_DX)],
                 ["Missing values", dataset_info["missing_value_counts"] or "none"],
             ],
@@ -185,6 +187,8 @@ def render_summary(
         "- `lesion_id` is a grouping key only. It must never be a model feature.",
         "- `dx_original`, `dx_current`, `dx_type`, `target`, `target_label`, `fold`, and `split` are label/audit columns. They must never be model features.",
         "- The Phase 1 default target is `melanoma` (melanoma vs all non-melanoma), matching the current notebooks. Use `--target malignant` or `--target multiclass` to regenerate the split for another task.",
+        "- The default feature version is `v1`, the frozen Phase 5 input. `--features v2` adds `circularity` and `eccentricity` and writes separate interim/split artifacts; it never overwrites V1.",
+        "- Artifacts are named by the target and, for V2, a `_v2` suffix. The split is identical across feature versions because it depends only on `image_id`, `lesion_id`, and `target`.",
         "",
         "## Reproduce",
         "",
@@ -209,6 +213,21 @@ def main() -> int:
     parser.add_argument("--test-fold", type=int, default=config.TEST_FOLD)
     parser.add_argument("--val-fold", type=int, default=config.VAL_FOLD)
     parser.add_argument(
+        "--features",
+        choices=sorted(config.FEATURE_SPECS),
+        default=config.DEFAULT_FEATURE_VERSION,
+        help=(
+            "Feature table version. v1 is the frozen Phase 5 input; v2 adds "
+            "circularity and eccentricity and is written to separate artifacts."
+        ),
+    )
+    parser.add_argument(
+        "--features-path",
+        type=Path,
+        default=None,
+        help="Optional explicit feature table; its schema must match --features.",
+    )
+    parser.add_argument(
         "--prevalence-tolerance",
         type=float,
         default=0.03,
@@ -220,8 +239,8 @@ def main() -> int:
     config.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     config.METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("Loading feature workbook and official metadata...")
-    features = load_features()
+    print(f"Loading {args.features} feature table and official metadata...")
+    features = load_features(args.features_path, feature_version=args.features)
     metadata = load_metadata()
 
     print("Merging metadata and validating the data contract...")
@@ -245,11 +264,11 @@ def main() -> int:
         max_prevalence_diff=args.prevalence_tolerance,
     )
 
-    interim_path = config.INTERIM_DIR / "ham10000_with_lesions.csv"
-    assignment_path = config.PROCESSED_DIR / f"split_assignments_{args.target}.csv"
-    manifest_path = config.METRICS_DIR / f"phase1_manifest_{args.target}.json"
-    summary_path = config.METRICS_DIR / f"phase1_summary_{args.target}.md"
-    active_target_path = config.PROCESSED_DIR / "active_target.txt"
+    interim_path = config.interim_dataset_path(args.features)
+    assignment_path = config.split_assignment_path(args.target, args.features)
+    manifest_path = config.phase1_manifest_path(args.target, args.features)
+    summary_path = config.phase1_summary_path(args.target, args.features)
+    active_target_path = config.active_target_path(args.features)
 
     merged.to_csv(interim_path, index=False)
 
@@ -267,6 +286,9 @@ def main() -> int:
     assignment[assignment_columns].to_csv(assignment_path, index=False)
 
     fingerprint = split_fingerprint(assignment, args.target, args.seed)
+    feature_path = Path(
+        features.attrs.get("feature_path", config.get_feature_spec(args.features)["path"])
+    )
     fractions = {
         split: float((assignment["split"] == split).mean()) for split in SPLIT_NAMES
     }
@@ -275,6 +297,10 @@ def main() -> int:
         "phase": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "target": target_info,
+        "feature_version": args.features,
+        "feature_columns": list(config.get_feature_columns(args.features)),
+        "numeric_features": list(config.get_numeric_features(args.features)),
+        "categorical_features": list(config.get_categorical_features(args.features)),
         "split": {
             "method": "StratifiedGroupKFold",
             "n_splits": args.n_splits,
@@ -287,7 +313,7 @@ def main() -> int:
         "dataset": dataset_summary(merged),
         "validation": split_info,
         "inputs": {
-            _relative(config.FEATURES_PATH): sha256_file(config.FEATURES_PATH),
+            _relative(feature_path): sha256_file(feature_path),
             _relative(config.METADATA_PATH): sha256_file(config.METADATA_PATH),
         },
         "outputs": {
@@ -308,9 +334,12 @@ def main() -> int:
         "uv run --python 3.13 "
         "--with pandas --with openpyxl --with scikit-learn==1.9.1 "
         f"python scripts/build_phase1_dataset.py --target {args.target} "
+        f"--features {args.features} "
         f"--seed {args.seed} --n-splits {args.n_splits} "
         f"--test-fold {args.test_fold} --val-fold {args.val_fold}"
     )
+    if args.features_path is not None:
+        command += f" --features-path {_relative(args.features_path)}"
 
     summary = render_summary(
         target_info=target_info,
