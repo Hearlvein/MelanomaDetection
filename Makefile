@@ -1,66 +1,39 @@
 PYTHON ?= python
-TARGET ?= melanoma
-TABULAR_EXTRAS = tabular,extraction,dev
+MODEL ?= custom_cnn
 
-.PHONY: help install install-deep test compile dataset-v1 dataset-v2 features embeddings deep-train deep-evaluate fusion-train fusion-evaluate final-test clean
+.PHONY: help install install-deep test dataset compare deep-train deep-evaluate clean
 
 help:
 	@echo "Targets:"
-	@echo "  install        Install editable package with tabular/extraction/test extras"
-	@echo "  install-deep   Same, plus TensorFlow"
-	@echo "  test           Run the full test suite (deep tests skip without TensorFlow)"
-	@echo "  compile        Byte-compile scripts, package, and tests"
-	@echo "  dataset-v1     Build the frozen V1 dataset and melanoma split"
-	@echo "  dataset-v2     Build the V2 dataset and melanoma split"
-	@echo "  features       Extract V2 image features (requires images and masks)"
-	@echo "  embeddings     Extract VGG16 embeddings (requires images)"
-	@echo "  deep-train     Train a Keras classifier (MODEL=custom_cnn|vgg16)"
+	@echo "  install        Install the tabular/test dependencies"
+	@echo "  install-deep   Install TensorFlow and Pillow as well"
+	@echo "  test           Run the test suite (deep tests skip without TensorFlow)"
+	@echo "  dataset        Build the merged dataset and grouped split"
+	@echo "  compare        Compare baselines and tuned models"
+	@echo "  deep-train     Train a Keras model (MODEL=custom_cnn|vgg16)"
 	@echo "  deep-evaluate  One-shot deep test evaluation"
-	@echo "  fusion-train   Train the V2 + embedding fusion model"
-	@echo "  fusion-evaluate  One-shot fusion test evaluation"
-	@echo "  final-test     One-shot Phase 5 tabular test evaluation (guard applies)"
 	@echo "  clean          Remove caches"
 
 install:
-	$(PYTHON) -m pip install -e ".[$(TABULAR_EXTRAS)]"
+	$(PYTHON) -m pip install -e ".[tabular,dev]"
 
 install-deep:
-	$(PYTHON) -m pip install -e ".[tabular,extraction,deep,dev]"
+	$(PYTHON) -m pip install -e ".[tabular,deep,dev]"
 
 test:
 	$(PYTHON) -m pytest -q
 
-compile:
-	$(PYTHON) -m compileall -q scripts src tests
+dataset:
+	$(PYTHON) scripts/01_dataset.py
 
-dataset-v1:
-	$(PYTHON) scripts/build_phase1_dataset.py --target $(TARGET) --features v1
-
-dataset-v2:
-	$(PYTHON) scripts/build_phase1_dataset.py --target $(TARGET) --features v2
-
-features:
-	$(PYTHON) scripts/extract_features.py --overwrite
-
-embeddings:
-	$(PYTHON) scripts/extract_embeddings.py --target $(TARGET) --features v2 --overwrite
-
-MODEL ?= custom_cnn
+compare:
+	$(PYTHON) scripts/02_compare_models.py
 
 deep-train:
-	$(PYTHON) scripts/train_deep.py --target $(TARGET) --model $(MODEL)
+	$(PYTHON) scripts/04_deep_learning.py train --model $(MODEL)
 
 deep-evaluate:
-	$(PYTHON) scripts/evaluate_deep.py --target $(TARGET) --model $(MODEL)
-
-fusion-train:
-	$(PYTHON) scripts/train_fusion.py --target $(TARGET) --features v2
-
-fusion-evaluate:
-	$(PYTHON) scripts/evaluate_fusion.py --target $(TARGET) --features v2
-
-final-test:
-	$(PYTHON) scripts/evaluate_final_test.py --target $(TARGET)
+	$(PYTHON) scripts/04_deep_learning.py evaluate --model $(MODEL)
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

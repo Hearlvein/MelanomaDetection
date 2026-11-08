@@ -1,4 +1,4 @@
-"""Evaluation utilities for the binary melanoma/malignant task.
+"""Evaluation utilities for the binary melanoma task.
 
 All functions here are deliberately independent of any particular split file or
 model. They take explicit labels, scores, thresholds, and lesion groups so the

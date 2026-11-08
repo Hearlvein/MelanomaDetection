@@ -1,26 +1,17 @@
+"""Data loading, validation, target definition, and lesion-grouped splits."""
+
 from __future__ import annotations
 
 import hashlib
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import StratifiedGroupKFold
 
 from . import config
-from .schema import (
-    FEATURE_COLUMNS_V1,
-    FEATURE_COLUMNS_V2,
-    FEATURE_COLUMNS_V2_LEGACY,
-)
-
-
-class DataValidationError(ValueError):
-    """Raised when the raw or merged dataset violates the expected contract."""
-
-
-# Backward-compatible alias: V1 remains the default tabular contract.
-FEATURE_COLUMNS = list(FEATURE_COLUMNS_V1)
 
 METADATA_COLUMNS = [
     "lesion_id",
@@ -31,6 +22,15 @@ METADATA_COLUMNS = [
     "sex",
     "localization",
 ]
+SPLIT_NAMES = ("train", "validation", "test")
+
+
+class DataValidationError(ValueError):
+    """Raised when the raw or merged dataset violates the expected contract."""
+
+
+class SplitValidationError(ValueError):
+    """Raised when a split violates the group or stratification contract."""
 
 
 def _require_columns(df: pd.DataFrame, required: list[str], name: str) -> None:
@@ -43,68 +43,11 @@ def _clean_image_id(series: pd.Series) -> pd.Series:
     return series.astype("string").str.strip()
 
 
-def detect_feature_version(df: pd.DataFrame) -> str:
-    """Return ``v1``, ``v2`` (keeps lesion_id), or ``v2_legacy`` (no lesion_id).
-
-    The column *set* identifies the version; column order is normalised by
-    :func:`load_features`. Extra columns are rejected so metadata or label
-    columns cannot slip into the modelling frame unnoticed.
-    """
-    columns = set(df.columns)
-    schemas = {
-        "v1": set(FEATURE_COLUMNS_V1),
-        "v2": set(FEATURE_COLUMNS_V2),
-        "v2_legacy": set(FEATURE_COLUMNS_V2_LEGACY),
-    }
-    for version, expected in schemas.items():
-        if columns == expected:
-            return version
-
-    # Report the closest schema to make the mismatch actionable.
-    closest = min(schemas.items(), key=lambda item: len(item[1] - columns) + len(columns - item[1]))
-    missing = sorted(closest[1] - columns)
-    unexpected = sorted(columns - closest[1])
-    raise DataValidationError(
-        "features do not match any known schema; "
-        f"closest is {closest[0]!r}, missing={missing}, unexpected={unexpected}"
-    )
-
-
-def _resolve_feature_path(
-    path: str | Path | None,
-    feature_version: str | None,
-) -> tuple[Path, str]:
-    version = feature_version or config.DEFAULT_FEATURE_VERSION
-    spec = config.get_feature_spec(version)
-
-    if path is None:
-        resolved = Path(spec["path"])
-        fallback = spec.get("fallback_path")
-        if not resolved.exists() and fallback is not None and Path(fallback).exists():
-            print(
-                f"note: {resolved} not found; using archived reference extract {fallback}",
-            )
-            resolved = Path(fallback)
-        return resolved, version
-
-    resolved = Path(path)
-    if not resolved.exists():
-        raise FileNotFoundError(f"Feature table not found: {resolved}")
-    return resolved, version
-
-
-def load_features(
-    path: str | Path | None = None,
-    *,
-    feature_version: str | None = None,
-) -> pd.DataFrame:
-    """Load and validate a V1 workbook or V2 CSV feature table.
-
-    ``feature_version`` selects the expected schema. When ``path`` is omitted
-    the configured path for that version is used; V2 falls back to the archived
-    reference CSV if the generated ``data/interim/features_v2.csv`` is absent.
-    """
-    path, version = _resolve_feature_path(path, feature_version)
+def load_features(path: str | Path | None = None) -> pd.DataFrame:
+    """Load the colour/shape workbook and validate its exact 21-column schema."""
+    path = Path(path or config.FEATURES_PATH)
+    if not path.exists():
+        raise FileNotFoundError(f"feature table not found: {path}")
 
     if path.suffix.lower() in {".xlsx", ".xls"}:
         df = pd.read_excel(path)
@@ -112,20 +55,14 @@ def load_features(
         df = pd.read_csv(path)
     df = df.copy()
 
-    detected = detect_feature_version(df)
-    accepted = {version}
-    if version == "v2":
-        accepted.add("v2_legacy")
-    if detected not in accepted:
+    missing = [column for column in config.FEATURE_COLUMNS if column not in df.columns]
+    unexpected = [column for column in df.columns if column not in config.FEATURE_COLUMNS]
+    if missing or unexpected:
         raise DataValidationError(
-            f"{path} contains a {detected!r} feature table but {version!r} was requested"
+            "features do not match the expected schema; "
+            f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
         )
-
-    # Normalise column order to the canonical contract for this version.
-    canonical = FEATURE_COLUMNS_V2 if detected == "v2" else (
-        FEATURE_COLUMNS_V2_LEGACY if detected == "v2_legacy" else FEATURE_COLUMNS_V1
-    )
-    df = df.loc[:, list(canonical)]
+    df = df.loc[:, list(config.FEATURE_COLUMNS)]
 
     df["image_id"] = _clean_image_id(df["image_id"])
     if df["image_id"].isna().any():
@@ -136,15 +73,8 @@ def load_features(
             f"features contains duplicated image_id values: {duplicated[:5]}"
         )
 
-    if "lesion_id" in df.columns:
-        if df["lesion_id"].isna().any():
-            raise DataValidationError("features contains missing lesion_id values")
-
-    df.attrs["feature_version"] = version
-    df.attrs["feature_schema"] = detected
     df.attrs["feature_path"] = str(path)
     return df
-
 
 
 def load_metadata(path: str | Path = config.METADATA_PATH) -> pd.DataFrame:
@@ -161,8 +91,9 @@ def load_metadata(path: str | Path = config.METADATA_PATH) -> pd.DataFrame:
         raise DataValidationError("metadata contains missing image_id values")
     duplicated = df.loc[df["image_id"].duplicated(), "image_id"].tolist()
     if duplicated:
-        raise DataValidationError(f"metadata contains duplicated image_id values: {duplicated[:5]}")
-
+        raise DataValidationError(
+            f"metadata contains duplicated image_id values: {duplicated[:5]}"
+        )
     return df
 
 
@@ -178,32 +109,13 @@ def merge_and_validate(
     *,
     enforce_contract: bool = True,
 ) -> pd.DataFrame:
-    """Merge lesion_id and original diagnosis, then validate the data contract.
+    """Merge features with lesion metadata and validate the data contract.
 
-    V2 extraction output already carries ``lesion_id``. It is verified against
-    the official metadata and then dropped before the merge so there is a single
-    authoritative grouping key.
-
-    ``enforce_contract=False`` skips the global row/lesion/class counts. It is
-    intended for small synthetic frames in tests; per-lesion consistency checks
-    still run.
+    ``enforce_contract=False`` is intended for small synthetic frames in tests.
+    It skips the global row/lesion/class counts but keeps every consistency check.
     """
-    features = features.copy()
-    metadata = metadata.copy()
-
-    if "lesion_id" in features.columns:
-        expected = features["image_id"].map(metadata.set_index("image_id")["lesion_id"])
-        mismatch = ~_values_match(features["lesion_id"], expected)
-        if mismatch.any():
-            examples = features.loc[mismatch, ["image_id", "lesion_id"]].head()
-            raise DataValidationError(
-                f"features lesion_id disagrees with metadata for {int(mismatch.sum())} rows; "
-                f"examples:\n{examples}"
-            )
-        features = features.drop(columns=["lesion_id"])
-
-    features = features.rename(columns={"dx": "dx_current"})
-    metadata = metadata.rename(columns={"dx": "dx_original"})
+    features = features.rename(columns={"dx": "dx_current"}).copy()
+    metadata = metadata.rename(columns={"dx": "dx_original"}).copy()
 
     merged = features.merge(
         metadata[
@@ -226,16 +138,18 @@ def merge_and_validate(
     unmatched = merged.loc[merged["lesion_id"].isna(), "image_id"].tolist()
     if unmatched:
         raise DataValidationError(
-            f"{len(unmatched)} feature images have no metadata match; examples: {unmatched[:5]}"
+            f"{len(unmatched)} feature images have no metadata match; "
+            f"examples: {unmatched[:5]}"
         )
 
-    # The feature workbook should agree with the official metadata on the
-    # shared demographic columns. A mismatch means the two inputs are out of sync.
+    # The feature workbook must agree with the official metadata on the shared
+    # demographic columns. A mismatch means the two inputs are out of sync.
     for column in ("age", "sex", "localization"):
         meta_column = f"{column}_meta"
         if not _values_match(merged[column], merged[meta_column]).all():
             mismatches = merged.loc[
-                ~_values_match(merged[column], merged[meta_column]), ["image_id", column, meta_column]
+                ~_values_match(merged[column], merged[meta_column]),
+                ["image_id", column, meta_column],
             ]
             raise DataValidationError(
                 f"{column} disagrees between features and metadata for "
@@ -260,101 +174,76 @@ def merge_and_validate(
     expected_dx = set(config.EXPECTED_DX)
     if enforce_contract and observed_dx != expected_dx:
         raise DataValidationError(
-            f"original dx classes do not match the contract; "
+            "original dx classes do not match the contract; "
             f"missing={sorted(expected_dx - observed_dx)}, "
             f"unexpected={sorted(observed_dx - expected_dx)}"
         )
 
-    per_lesion_diagnoses = merged.groupby("lesion_id")["dx_original"].nunique()
-    inconsistent = per_lesion_diagnoses[per_lesion_diagnoses > 1]
-    if len(inconsistent):
-        raise DataValidationError(
-            f"{len(inconsistent)} lesions have more than one original diagnosis; "
-            f"examples: {inconsistent.head().to_dict()}"
-        )
-
-    per_lesion_current = merged.groupby("lesion_id")["dx_current"].nunique()
-    inconsistent_current = per_lesion_current[per_lesion_current > 1]
-    if len(inconsistent_current):
-        raise DataValidationError(
-            f"{len(inconsistent_current)} lesions have more than one current label; "
-            f"examples: {inconsistent_current.head().to_dict()}"
-        )
+    # A lesion can appear on several images, but its diagnosis must be stable.
+    for column in ("dx_original", "dx_current"):
+        per_lesion = merged.groupby("lesion_id")[column].nunique()
+        inconsistent = per_lesion[per_lesion > 1]
+        if len(inconsistent):
+            raise DataValidationError(
+                f"{len(inconsistent)} lesions have more than one {column} value; "
+                f"examples: {inconsistent.head().to_dict()}"
+            )
 
     return merged
 
 
-def add_target(df: pd.DataFrame, definition: str = config.TARGET_DEFINITION) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Add a target column and a human-readable target label.
-
-    The target is the only label column that modelling code should use.
-    """
+def add_target(
+    df: pd.DataFrame, definition: str = config.TARGET_DEFINITION
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Add the binary melanoma target and a human-readable label."""
     if definition not in config.TARGET_SPECS:
         raise ValueError(
             f"unknown target definition {definition!r}; "
             f"choose from {sorted(config.TARGET_SPECS)}"
         )
-
     if "dx_original" not in df.columns:
         raise DataValidationError("add_target requires a 'dx_original' column")
 
     spec = config.TARGET_SPECS[definition]
-    result = df.copy()
-
-    if definition == "multiclass":
-        result["target"] = result["dx_original"].astype(str)
-        result["target_label"] = result["target"]
-        target_info = {
-            "definition": definition,
-            "description": spec["description"],
-            "positive_classes": None,
-            "negative_classes": None,
-            "labels": {label: label for label in config.EXPECTED_DX},
-        }
-    else:
-        positive = tuple(spec["positive"])
-        negative = tuple(spec["negative"])
-        if set(positive) & set(negative):
-            raise DataValidationError(f"target {definition!r} has overlapping positive/negative classes")
-        if set(positive) | set(negative) != set(config.EXPECTED_DX):
-            raise DataValidationError(
-                f"target {definition!r} does not cover every original dx class"
-            )
-
-        result["target"] = result["dx_original"].isin(positive).astype(int)
-        result["target_label"] = np.where(
-            result["target"] == 1, spec["positive_label"], spec["negative_label"]
+    positive = tuple(spec["positive"])
+    negative = tuple(spec["negative"])
+    if set(positive) & set(negative):
+        raise DataValidationError(
+            f"target {definition!r} has overlapping positive/negative classes"
         )
-        target_info = {
-            "definition": definition,
-            "description": spec["description"],
-            "positive_classes": list(positive),
-            "negative_classes": list(negative),
-            "labels": {1: spec["positive_label"], 0: spec["negative_label"]},
-        }
+    if set(positive) | set(negative) != set(config.EXPECTED_DX):
+        raise DataValidationError(
+            f"target {definition!r} does not cover every original dx class"
+        )
+
+    result = df.copy()
+    result["target"] = result["dx_original"].isin(positive).astype(int)
+    result["target_label"] = np.where(
+        result["target"] == 1, spec["positive_label"], spec["negative_label"]
+    )
 
     if result["target"].isna().any():
         raise DataValidationError("target contains missing values")
 
+    target_info = {
+        "definition": definition,
+        "description": spec["description"],
+        "positive_classes": list(positive),
+        "negative_classes": list(negative),
+        "labels": {1: spec["positive_label"], 0: spec["negative_label"]},
+    }
     return result, target_info
 
 
 def load_split_assignments(
     target: str = config.TARGET_DEFINITION,
     path: str | Path | None = None,
-    *,
-    feature_version: str = config.DEFAULT_FEATURE_VERSION,
 ) -> pd.DataFrame:
-    """Load the Phase 1 split assignment without any model features.
-
-    Deep-learning code needs only ``image_id``, ``lesion_id``, ``target`` and
-    ``split``. Keeping it separate avoids making the CNN depend on the tabular
-    feature table.
-    """
-    path = Path(path or config.split_assignment_path(target, feature_version))
+    """Load the split assignment without any model features."""
+    path = Path(path or config.split_assignment_path(target))
     if not path.exists():
         raise FileNotFoundError(
-            f"split assignments not found: {path}; run scripts/build_phase1_dataset.py first"
+            f"split assignments not found: {path}; run scripts/01_dataset.py first"
         )
 
     assignment = pd.read_csv(path)
@@ -368,7 +257,7 @@ def load_split_assignments(
         raise DataValidationError("split assignment contains duplicated image_id values")
     if assignment["target"].isna().any():
         raise DataValidationError("target contains missing values")
-    if set(assignment["split"].unique()) != {"train", "validation", "test"}:
+    if set(assignment["split"].unique()) != set(SPLIT_NAMES):
         raise DataValidationError(
             "split column must contain train, validation, and test"
         )
@@ -379,87 +268,66 @@ def load_modeling_frame(
     target: str = config.TARGET_DEFINITION,
     interim_path: str | Path | None = None,
     split_path: str | Path | None = None,
-    *,
-    feature_version: str = config.DEFAULT_FEATURE_VERSION,
 ) -> pd.DataFrame:
-    """Load features + labels + the Phase 1 split for one target.
+    """Load raw features, labels, and the split assignment for one target."""
+    feature_columns = [column for column in config.ALL_FEATURES]
+    interim_path = Path(interim_path or config.interim_dataset_path())
+    split_path = Path(split_path or config.split_assignment_path(target))
 
-    Only the feature columns for ``feature_version`` are read from the interim
-    dataset. Label and audit columns come from the split assignment, so
-    modelling code can explicitly select features and cannot accidentally train
-    on a label column.
-    """
-    spec = config.get_feature_spec(feature_version)
-    feature_columns = [column for column in spec["all_features"]]
-    interim_path = Path(interim_path or config.interim_dataset_path(feature_version))
-    split_path = Path(
-        split_path or config.split_assignment_path(target, feature_version)
-    )
-
-    if not interim_path.exists():
-        raise FileNotFoundError(
-            f"interim dataset not found: {interim_path}; run scripts/build_phase1_dataset.py first"
-        )
-    if not split_path.exists():
-        raise FileNotFoundError(
-            f"split assignments not found: {split_path}; run scripts/build_phase1_dataset.py first"
-        )
+    for path, hint in (
+        (interim_path, "scripts/01_dataset.py"),
+        (split_path, "scripts/01_dataset.py"),
+    ):
+        if not path.exists():
+            raise FileNotFoundError(f"dataset artifact not found: {path}; run {hint} first")
 
     features = pd.read_csv(interim_path, usecols=["image_id", *feature_columns])
     assignment = pd.read_csv(split_path)
 
-    required_assignment_columns = {
-        "image_id",
-        "lesion_id",
-        "target",
-        "target_label",
-        "fold",
-        "split",
-    }
-    missing = required_assignment_columns - set(assignment.columns)
+    required = {"image_id", "lesion_id", "target", "target_label", "fold", "split"}
+    missing = required - set(assignment.columns)
     if missing:
         raise DataValidationError(
             f"split assignment is missing columns: {sorted(missing)}"
         )
-
     if assignment["image_id"].duplicated().any():
         raise DataValidationError("split assignment contains duplicated image_id values")
 
     frame = features.merge(
-        assignment,
-        on="image_id",
-        how="inner",
-        validate="one_to_one",
+        assignment, on="image_id", how="inner", validate="one_to_one"
     )
-
     if len(frame) != len(assignment):
         raise DataValidationError(
             f"only {len(frame)} of {len(assignment)} split rows matched the interim dataset"
         )
-
-    if frame[feature_columns].columns.duplicated().any():
+    if frame[list(feature_columns)].columns.duplicated().any():
         raise DataValidationError("feature columns are duplicated after the merge")
     if frame["target"].isna().any():
         raise DataValidationError("target contains missing values")
-    if set(frame["split"].unique()) != {"train", "validation", "test"}:
+    if set(frame["split"].unique()) != set(SPLIT_NAMES):
         raise DataValidationError("split column must contain train, validation, and test")
 
     return frame
 
 
 def dataset_summary(df: pd.DataFrame) -> dict[str, Any]:
-    """Return JSON-friendly dataset counts for the manifest and report."""
-    missing = {column: int(df[column].isna().sum()) for column in df.columns if df[column].isna().any()}
-
+    """Return JSON-friendly dataset counts."""
+    missing = {
+        column: int(df[column].isna().sum())
+        for column in df.columns
+        if df[column].isna().any()
+    }
     return {
         "rows": int(len(df)),
         "unique_image_ids": int(df["image_id"].nunique()),
         "unique_lesions": int(df["lesion_id"].nunique()),
         "dx_original_counts": {
-            str(key): int(value) for key, value in df["dx_original"].value_counts().items()
+            str(key): int(value)
+            for key, value in df["dx_original"].value_counts().items()
         },
         "dx_current_counts": {
-            str(key): int(value) for key, value in df["dx_current"].value_counts().items()
+            str(key): int(value)
+            for key, value in df["dx_current"].value_counts().items()
         },
         "missing_value_counts": missing,
     }
@@ -471,4 +339,169 @@ def sha256_file(path: str | Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Splitting
+# ---------------------------------------------------------------------------
+
+def make_grouped_cv(
+    n_splits: int = config.N_SPLITS, seed: int = config.SEED
+) -> StratifiedGroupKFold:
+    """Grouped cross-validation splitter for use inside the training split."""
+    if n_splits < 2:
+        raise SplitValidationError("n_splits must be at least 2")
+    return StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+
+def make_grouped_split(
+    df: pd.DataFrame,
+    target_col: str = "target",
+    group_col: str = "lesion_id",
+    n_splits: int = config.N_SPLITS,
+    test_fold: int = config.TEST_FOLD,
+    val_fold: int = config.VAL_FOLD,
+    seed: int = config.SEED,
+) -> pd.DataFrame:
+    """Create a reproducible 3-way split with lesion-disjoint folds."""
+    if target_col not in df.columns:
+        raise SplitValidationError(f"missing target column: {target_col!r}")
+    if group_col not in df.columns:
+        raise SplitValidationError(f"missing group column: {group_col!r}")
+    if df[target_col].isna().any():
+        raise SplitValidationError("target contains missing values")
+    if df[group_col].isna().any():
+        raise SplitValidationError("group column contains missing values")
+    if n_splits < 3:
+        raise SplitValidationError("n_splits must be at least 3")
+    if not 0 <= test_fold < n_splits:
+        raise SplitValidationError(f"test_fold must be in [0, {n_splits - 1}]")
+    if not 0 <= val_fold < n_splits:
+        raise SplitValidationError(f"val_fold must be in [0, {n_splits - 1}]")
+    if test_fold == val_fold:
+        raise SplitValidationError("test_fold and val_fold must be different")
+
+    splitter = StratifiedGroupKFold(
+        n_splits=n_splits, shuffle=True, random_state=seed
+    )
+    fold_assignment = np.full(len(df), -1, dtype=int)
+    for fold, (_, held_out_index) in enumerate(
+        splitter.split(df, y=df[target_col], groups=df[group_col])
+    ):
+        fold_assignment[held_out_index] = fold
+
+    if (fold_assignment < 0).any():
+        raise SplitValidationError("some rows were not assigned to a fold")
+
+    split_assignment = np.select(
+        [fold_assignment == test_fold, fold_assignment == val_fold],
+        ["test", "validation"],
+        default="train",
+    )
+    result = df.copy()
+    result["fold"] = fold_assignment
+    result["split"] = pd.Series(split_assignment, index=result.index)
+    return result
+
+
+def validate_split(
+    df: pd.DataFrame,
+    target_col: str = "target",
+    group_col: str = "lesion_id",
+    max_prevalence_diff: float = 0.03,
+) -> dict[str, Any]:
+    """Validate group isolation, coverage, and approximate stratification."""
+    required = {"image_id", group_col, target_col, "split", "fold"}
+    missing_columns = required - set(df.columns)
+    if missing_columns:
+        raise SplitValidationError(
+            f"missing split columns: {sorted(missing_columns)}"
+        )
+
+    observed_splits = set(df["split"].unique())
+    if observed_splits != set(SPLIT_NAMES):
+        raise SplitValidationError(
+            f"expected split values {sorted(SPLIT_NAMES)}, got {sorted(observed_splits)}"
+        )
+    if df["image_id"].duplicated().any():
+        raise SplitValidationError("image_id is duplicated across the split assignment")
+
+    group_sets = {
+        split: set(df.loc[df["split"] == split, group_col].unique())
+        for split in SPLIT_NAMES
+    }
+    overlap: dict[str, int] = {}
+    for left, right in combinations(SPLIT_NAMES, 2):
+        shared = group_sets[left] & group_sets[right]
+        overlap[f"{left}__{right}"] = len(shared)
+        if shared:
+            raise SplitValidationError(
+                f"{len(shared)} lesions overlap between {left} and {right}: "
+                f"{sorted(shared)[:5]}"
+            )
+
+    overall_prevalence = df[target_col].value_counts(normalize=True, dropna=False)
+    prevalence: dict[str, dict[str, float]] = {}
+    max_diff = 0.0
+
+    for split in SPLIT_NAMES:
+        subset = df.loc[df["split"] == split]
+        split_prevalence = subset[target_col].value_counts(normalize=True, dropna=False)
+        split_prevalence = split_prevalence.reindex(
+            overall_prevalence.index, fill_value=0.0
+        )
+        diff = float((split_prevalence - overall_prevalence).abs().max())
+        max_diff = max(max_diff, diff)
+        prevalence[split] = {
+            str(label): float(value) for label, value in split_prevalence.items()
+        }
+        missing_labels = set(overall_prevalence.index) - set(
+            subset[target_col].unique()
+        )
+        if missing_labels:
+            raise SplitValidationError(
+                f"{split} is missing target labels: {sorted(missing_labels)}"
+            )
+
+    if max_diff > max_prevalence_diff:
+        raise SplitValidationError(
+            f"target prevalence differs by up to {max_diff:.4f}, "
+            f"above the allowed {max_prevalence_diff:.4f}"
+        )
+
+    counts = {
+        split: {
+            "rows": int((df["split"] == split).sum()),
+            "lesions": int(len(group_sets[split])),
+            "target_counts": {
+                str(label): int(value)
+                for label, value in df.loc[df["split"] == split, target_col]
+                .value_counts()
+                .items()
+            },
+        }
+        for split in SPLIT_NAMES
+    }
+
+    return {
+        "counts": counts,
+        "group_overlap": overlap,
+        "prevalence": prevalence,
+        "max_prevalence_diff": max_diff,
+        "prevalence_tolerance": max_prevalence_diff,
+    }
+
+
+def split_fingerprint(
+    df: pd.DataFrame, target_definition: str, seed: int
+) -> str:
+    """Stable SHA-256 fingerprint of the image/fold/split assignment."""
+    digest = hashlib.sha256()
+    digest.update(f"target={target_definition}|seed={seed}\n".encode("utf-8"))
+    ordered = df.sort_values("image_id")[["image_id", "split", "fold"]]
+    for row in ordered.itertuples(index=False):
+        digest.update(
+            f"{row.image_id}|{row.split}|{int(row.fold)}\n".encode("utf-8")
+        )
     return digest.hexdigest()

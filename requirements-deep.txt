@@ -1,4 +1,0 @@
--r requirements.txt
-
-# Deep learning (TensorFlow/Keras)
-tensorflow>=2.16,<3

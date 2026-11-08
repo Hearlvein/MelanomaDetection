@@ -1,0 +1,122 @@
+{
+  "created_at": "2026-11-06T10:55:19.417008+00:00",
+  "target": {
+    "definition": "melanoma",
+    "description": "Melanoma vs all non-melanoma diagnoses.",
+    "positive_classes": [
+      "mel"
+    ],
+    "negative_classes": [
+      "nv",
+      "bkl",
+      "bcc",
+      "akiec",
+      "vasc",
+      "df"
+    ],
+    "labels": {
+      "1": "melanoma",
+      "0": "non_melanoma"
+    }
+  },
+  "split": {
+    "method": "StratifiedGroupKFold",
+    "n_splits": 5,
+    "test_fold": 0,
+    "val_fold": 1,
+    "seed": 42,
+    "fractions": {
+      "train": 0.6,
+      "validation": 0.2,
+      "test": 0.2
+    },
+    "fingerprint": "b39eae73a410580368397df3c203b644d7887084cea27627084a318a5cffa862"
+  },
+  "dataset": {
+    "rows": 10015,
+    "unique_image_ids": 10015,
+    "unique_lesions": 7470,
+    "dx_original_counts": {
+      "nv": 6705,
+      "mel": 1113,
+      "bkl": 1099,
+      "bcc": 514,
+      "akiec": 327,
+      "vasc": 142,
+      "df": 115
+    },
+    "dx_current_counts": {
+      "nomel": 8902,
+      "mel": 1113
+    },
+    "missing_value_counts": {
+      "age": 57
+    }
+  },
+  "validation": {
+    "counts": {
+      "train": {
+        "rows": 6009,
+        "lesions": 4482,
+        "target_counts": {
+          "0": 5341,
+          "1": 668
+        }
+      },
+      "validation": {
+        "rows": 2003,
+        "lesions": 1494,
+        "target_counts": {
+          "0": 1781,
+          "1": 222
+        }
+      },
+      "test": {
+        "rows": 2003,
+        "lesions": 1494,
+        "target_counts": {
+          "0": 1780,
+          "1": 223
+        }
+      }
+    },
+    "group_overlap": {
+      "train__validation": 0,
+      "train__test": 0,
+      "validation__test": 0
+    },
+    "prevalence": {
+      "train": {
+        "0": 0.8888334165418539,
+        "1": 0.11116658345814612
+      },
+      "validation": {
+        "0": 0.889166250624064,
+        "1": 0.1108337493759361
+      },
+      "test": {
+        "0": 0.8886669995007489,
+        "1": 0.11133300049925113
+      }
+    },
+    "max_prevalence_diff": 0.00029955067398912405,
+    "prevalence_tolerance": 0.03
+  },
+  "inputs": {
+    "data/raw/HAM10000_features_couleurs.xlsx": "cb2b56ce02c0869000b3766c8b9abf2bfea6bdf7f6a465f02242b313c041a3b4",
+    "data/raw/HAM10000_metadata.csv": "06aee5e603d313ba69de38263053c792a1dff030eb9c44a96ceb477ceefb99a5"
+  },
+  "outputs": {
+    "interim_dataset": "data/interim/ham10000_with_lesions.csv",
+    "split_assignments": "data/processed/split_assignments_melanoma.csv",
+    "report": "reports/metrics/dataset.json"
+  },
+  "software": {
+    "python": "3.13.15",
+    "pandas": "3.1.1",
+    "numpy": "2.5.4",
+    "scikit-learn": "1.9.1"
+  },
+  "stage": "dataset",
+  "command": "uv run --python 3.13 --with pandas --with openpyxl --with scikit-learn==1.9.1 python scripts/01_dataset.py --seed 42 --n-splits 5 --test-fold 0 --val-fold 1"
+}

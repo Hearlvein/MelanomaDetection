@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "melanoma-detection"
 version = "0.1.0"
-description = "Leak-free HAM10000 melanoma detection with tabular, deep-learning, and fusion models."
+description = "Leak-free HAM10000 melanoma detection with tabular and deep models."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -22,36 +22,13 @@ tabular = [
   "matplotlib>=3.8,<4",
   "imbalanced-learn>=0.14,<1",
 ]
-extraction = [
-  "scikit-image>=0.24,<1",
-  "pillow>=10,<12",
-  "tqdm>=4.66,<5",
-]
 deep = [
   "tensorflow>=2.16,<3",
-]
-fusion = [
-  "openpyxl>=3.1,<4",
-  "matplotlib>=3.8,<4",
-  "imbalanced-learn>=0.14,<1",
-  "tensorflow>=2.16,<3",
+  "pillow>=10,<13",
 ]
 dev = [
   "pytest>=8,<10",
 ]
-all = [
-  "openpyxl>=3.1,<4",
-  "matplotlib>=3.8,<4",
-  "imbalanced-learn>=0.14,<1",
-  "scikit-image>=0.24,<1",
-  "pillow>=10,<12",
-  "tqdm>=4.66,<5",
-  "tensorflow>=2.16,<3",
-  "pytest>=8,<10",
-]
-
-[tool.setuptools]
-package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

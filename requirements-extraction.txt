@@ -1,6 +1,0 @@
--r requirements.txt
-
-# Feature extraction (images + lesion masks)
-scikit-image>=0.24,<1
-pillow>=10,<12
-tqdm>=4.66,<5

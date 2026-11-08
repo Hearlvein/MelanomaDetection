@@ -3,159 +3,158 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from PIL import Image
 
-from melanoma_detection.deep import datasets, evaluate, train
+pytest.importorskip("PIL")
+
+from PIL import Image  # noqa: E402
+
+from melanoma_detection.deep import run  # noqa: E402
 
 
 def _make_images(tmp_path, count: int = 6, size: int = 24):
     image_dir = tmp_path / "HAM10000"
     image_dir.mkdir()
-    rows = []
     rng = np.random.default_rng(0)
+    rows = []
     for index in range(count):
         image_id = f"ISIC_{index:04d}"
         image = rng.integers(0, 256, size=(size, size, 3), dtype=np.uint8)
         Image.fromarray(image, mode="RGB").save(image_dir / f"{image_id}.jpg")
-        target = index % 2
         rows.append(
             {
                 "image_id": image_id,
                 "lesion_id": f"HAM_{index:07d}",
-                "target": target,
-                "target_label": "melanoma" if target else "non_melanoma",
-                "fold": index % 3,
-                "split": "train" if index < 4 else "validation",
+                "target": index % 2,
+                "split": "train" if index < count - 2 else "validation",
             }
         )
     return pd.DataFrame(rows), image_dir
 
 
 def test_load_rgb_image_returns_the_requested_shape_and_range(tmp_path) -> None:
-    frame, image_dir = _make_images(tmp_path, count=1)
-    path = datasets.resolve_image_path(frame.loc[0, "image_id"], image_dir)
-    image = datasets.load_rgb_image(path, image_size=(16, 12))
-    assert image.shape == (12, 16, 3)  # (height, width, channels)
+    frame, image_dir = _make_images(tmp_path, size=32)
+    path = run.resolve_image_path(frame.iloc[0]["image_id"], image_dir)
+
+    image = run.load_rgb_image(path, (16, 20))
+
+    assert image.shape == (16, 20, 3)
     assert image.dtype == np.float32
-    assert 0.0 <= float(image.min()) and float(image.max()) <= 255.0
+    assert 0 <= image.min() <= image.max() <= 255
 
 
-def test_iter_batches_respects_frame_order(tmp_path) -> None:
-    frame, image_dir = _make_images(tmp_path, count=6)
+def test_iter_batches_covers_every_row(tmp_path) -> None:
+    frame, image_dir = _make_images(tmp_path, count=7)
     batches = list(
-        datasets.iter_batches(
-            frame,
-            image_dir,
-            image_size=(16, 16),
-            batch_size=4,
-            shuffle=False,
+        run.iter_batches(
+            frame, image_dir, image_size=(16, 16), batch_size=3, shuffle=True
         )
     )
-    assert [len(targets) for _, targets in batches] == [4, 2]
-    assert np.array_equal(
-        np.concatenate([targets for _, targets in batches]), frame["target"].to_numpy(dtype=float)
-    )
+
+    assert sum(len(images) for images, _ in batches) == 7
+    assert all(images.shape[1:] == (16, 16, 3) for images, _ in batches)
+    assert all(targets.shape == (len(images),) for images, targets in batches)
 
 
-def test_augmentation_is_deterministic_for_a_seed() -> None:
-    rng_a = np.random.default_rng(7)
-    rng_b = np.random.default_rng(7)
-    image = np.arange(32 * 32 * 3, dtype=np.float32).reshape(32, 32, 3)
-    assert np.array_equal(
-        datasets.augment_image(image.copy(), rng_a),
-        datasets.augment_image(image.copy(), rng_b),
-    )
+def test_iter_batches_rejects_a_bad_batch_size(tmp_path) -> None:
+    frame, image_dir = _make_images(tmp_path)
+    with pytest.raises(ValueError, match="batch_size"):
+        list(run.iter_batches(frame, image_dir, batch_size=0))
 
 
-def test_missing_images_are_reported(tmp_path) -> None:
+def test_split_frame_validates_the_split_name(tmp_path) -> None:
+    frame, _ = _make_images(tmp_path)
+
+    assert len(run.split_frame(frame, "train")) == 4
+    with pytest.raises(ValueError, match="unknown split"):
+        run.split_frame(frame, "holdout")
+
+
+def test_missing_images_and_assert_images_exist(tmp_path) -> None:
     frame, image_dir = _make_images(tmp_path, count=2)
-    (image_dir / "ISIC_0001.jpg").unlink()
-    assert datasets.missing_images(frame, image_dir) == ["ISIC_0001"]
-    with pytest.raises(FileNotFoundError, match="missing"):
-        datasets.assert_images_exist(frame, image_dir)
+    (image_dir / f"{frame.iloc[0]['image_id']}.jpg").unlink()
+
+    missing = run.missing_images(frame, image_dir)
+    assert missing == [frame.iloc[0]["image_id"]]
+
+    with pytest.raises(FileNotFoundError, match="images are missing"):
+        run.assert_images_exist(frame, image_dir)
 
 
-def test_balanced_class_weight_is_inverse_frequency() -> None:
-    weights = train.balanced_class_weight(np.array([0, 0, 0, 1]))
-    assert weights[0] == pytest.approx(4 / 6)
-    assert weights[1] == pytest.approx(4 / 2)
-
-
-def test_deep_test_guard_refuses_to_overwrite(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("melanoma_detection.config.METRICS_DIR", tmp_path)
-    metrics_path, _ = evaluate.deep_test_paths("melanoma", "custom_cnn")
-    metrics_path.write_text("{}", encoding="utf-8")
-
-    with pytest.raises(FileExistsError, match="already exists"):
-        evaluate.assert_deep_test_not_yet_evaluated("melanoma", "custom_cnn")
-
-    forced = evaluate.assert_deep_test_not_yet_evaluated(
-        "melanoma", "custom_cnn", force=True
+def test_augment_image_keeps_shape_and_range(tmp_path) -> None:
+    frame, image_dir = _make_images(tmp_path, count=1)
+    image = run.load_rgb_image(
+        run.resolve_image_path(frame.iloc[0]["image_id"], image_dir), (16, 16)
     )
-    assert forced == metrics_path
+
+    augmented = run.augment_image(image, np.random.default_rng(0))
+
+    assert augmented.shape == image.shape
+    assert augmented.dtype == np.float32
+    assert 0 <= augmented.min() <= augmented.max() <= 255
 
 
-def test_custom_cnn_trains_predicts_and_round_trips(tmp_path) -> None:
+def test_balanced_class_weight_matches_the_definition() -> None:
+    weights = run.balanced_class_weight([0, 0, 0, 1])
+
+    assert weights[0] == pytest.approx(4 / (2 * 3))
+    assert weights[1] == pytest.approx(4 / (2 * 1))
+
+
+def test_class_weight_modes() -> None:
+    frame = pd.DataFrame({"target": [0, 0, 1, 1]})
+
+    assert run.class_weight_for(frame, "none") is None
+    assert run.class_weight_for(frame, "balanced") == {0: 1.0, 1: 1.0}
+    with pytest.raises(ValueError, match="unknown class-weight"):
+        run.class_weight_for(frame, "mystery")
+
+
+def test_history_summary_returns_the_best_epoch() -> None:
+    history = {"loss": [1.0, 0.8, 0.6], "val_loss": [1.1, 0.7, 0.9]}
+
+    summary = run.history_summary(history)
+
+    assert summary["best_epoch"] == 2
+    assert summary["best_val_loss"] == pytest.approx(0.7)
+
+
+def test_deep_test_guard_refuses_a_second_run(tmp_path) -> None:
+    metrics = tmp_path / "deep_final_test.json"
+
+    path = run.assert_deep_test_not_yet_evaluated(
+        "custom_cnn", metrics_path=metrics
+    )
+    assert path == metrics
+
+    metrics.write_text("{}")
+    with pytest.raises(FileExistsError, match="already exists"):
+        run.assert_deep_test_not_yet_evaluated("custom_cnn", metrics_path=metrics)
+    assert (
+        run.assert_deep_test_not_yet_evaluated(
+            "custom_cnn", force=True, metrics_path=metrics
+        )
+        == metrics
+    )
+
+
+def test_custom_cnn_builds_and_predicts() -> None:
     tf = pytest.importorskip("tensorflow")
     from melanoma_detection.deep import models
 
-    frame, image_dir = _make_images(tmp_path, count=6)
-    train_frame = frame.loc[frame["split"] == "train"].reset_index(drop=True)
-    validation_frame = frame.loc[frame["split"] == "validation"].reset_index(drop=True)
-
-    image_size = (24, 24)
-    train_dataset = datasets.make_tf_dataset(
-        train_frame, image_dir, image_size=image_size, batch_size=2, shuffle=True
-    )
-    validation_dataset = datasets.make_tf_dataset(
-        validation_frame, image_dir, image_size=image_size, batch_size=2
-    )
-
-    model = models.build_model("custom_cnn", input_shape=(24, 24, 3), base_filters=2)
+    model = models.build_custom_cnn((32, 32, 3), base_filters=4)
     models.compile_model(model)
-    history = train.train_model(
-        model,
-        train_dataset,
-        validation_dataset,
-        epochs=1,
-        class_weight=train.class_weight_for(train_frame),
-        verbose=0,
-    )
-    assert "loss" in history.history
+    output = model(tf.zeros((2, 32, 32, 3)))
 
-    scores = evaluate.predict_scores(model, validation_dataset)
-    assert scores.shape == (len(validation_frame),)
-    assert np.all((scores >= 0) & (scores <= 1))
-
-    artifact, sidecar = train.save_deep_artifact(
-        model,
-        {"target": "melanoma", "model": "custom_cnn", "seed": 42},
-        tmp_path / "model.keras",
-    )
-    assert artifact.exists()
-    assert sidecar.exists()
-
-    loaded, metadata = train.load_deep_artifact(artifact)
-    assert metadata["target"] == "melanoma"
-    loaded_scores = evaluate.predict_scores(loaded, validation_dataset)
-    assert np.allclose(scores, loaded_scores, atol=1e-5)
-
-    extractor = models.build_embedding_extractor(loaded)
-    embeddings = extractor.predict(validation_dataset, verbose=0)
-    assert embeddings.shape == (len(validation_frame), 8)
+    assert tuple(output.shape) == (2, 1)
 
 
-def test_vgg16_transfer_builds_and_exposes_embeddings(tmp_path) -> None:
-    pytest.importorskip("tensorflow")
+def test_vgg16_transfer_builds_without_pretrained_weights() -> None:
+    tf = pytest.importorskip("tensorflow")
     from melanoma_detection.deep import models
 
-    model = models.build_model(
-        "vgg16", input_shape=(32, 32, 3), weights=None, dense_units=8
+    model = models.build_vgg16_transfer(
+        (64, 64, 3), weights=None, dense_units=8
     )
-    assert model.output_shape == (None, 1)
-    assert model.get_layer("embedding").units == 8
+    output = model(tf.zeros((1, 64, 64, 3)))
 
-    embedding_model = models.build_vgg16_embedding_model(
-        input_shape=(32, 32, 3), weights=None
-    )
-    assert embedding_model.output_shape == (None, 512)
+    assert tuple(output.shape) == (1, 1)
